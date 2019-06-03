@@ -203,6 +203,23 @@ def main():
         print_text(screen, font1, font_pos_x, 20 + (font1_height + 6) * 2, f'速度: ')
         print_text(screen, font1, font_pos_x, 20 + (font1_height + 6) * 3, f'{score // 10000}')
         print_text(screen, font1, font_pos_x, 30 + (font1_height + 6) * 4, f'下一个：')
+        print_text(screen, font1, font_pos_x, 320 + (font1_height + 6) * 4, f'左右键移动')
+        print_text(screen, font1, font_pos_x, 360 + (font1_height + 6) * 4, f'上键旋转')
+        if start and pause and not game_over:
+            print_text(screen, font1, font_pos_x, 200 + (font1_height + 6) * 4, f'游戏暂停')
+            print_text(screen, font1, font_pos_x, 240 + (font1_height + 6) * 4, f'按空格键')
+            print_text(screen, font1, font_pos_x, 280 + (font1_height + 6) * 4, f'恢复游戏')
+        elif start and not pause and not game_over:
+            print_text(screen, font1, font_pos_x, 200 + (font1_height + 6) * 4, f'游戏进行中')
+            print_text(screen, font1, font_pos_x, 240 + (font1_height + 6) * 4, f'按空格键')
+            print_text(screen, font1, font_pos_x, 280 + (font1_height + 6) * 4, f'暂停游戏')
+        elif start and game_over:
+            print_text(screen, font1, font_pos_x, 200 + (font1_height + 6) * 4, f'按回车键')
+            print_text(screen, font1, font_pos_x, 240 + (font1_height + 6) * 4, f'开始新游戏')
+        elif not start:
+            print_text(screen, font1, font_pos_x, 200 + (font1_height + 6) * 4, f'按回车键')
+            if game_over:
+                print_text(screen, font1, font_pos_x, 240 + (font1_height + 6) * 4, f'开始游戏')
 
         if next_block:
             _h = 30 + (font1_height + 6) * 5
