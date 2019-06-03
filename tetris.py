@@ -1,509 +1,218 @@
-import sys
-import random, copy
-import pygame as pg
+﻿import sys
+import time
+import pygame
 from pygame.locals import *
+import blocks
+
+SIZE = 30  # 每个小方格大小
+BLOCK_HEIGHT = 20  # 游戏区高度
+BLOCK_WIDTH = 10   # 游戏区宽度
+BORDER_WIDTH = 4   # 游戏区边框宽度
+BORDER_COLOR = (40, 40, 200)  # 游戏区边框颜色
+SCREEN_WIDTH = SIZE * (BLOCK_WIDTH + 5)  # 游戏屏幕的宽
+SCREEN_HEIGHT = SIZE * BLOCK_HEIGHT      # 游戏屏幕的高
+BG_COLOR = (40, 40, 60)  # 背景色
+BLACK = (0, 0, 0)
+RED = (200, 30, 30)      # GAME OVER 的字体颜色
 
 
-EMPTY_CELL = 0  # 空区标识，表示没有方块
-FALLING_BLOCK = 1  # 下落中的方块标识，也就是活动方块。
-STATIC_BLOCK = 2  # 固实方块标识
-
-'''
-全局变量声明
-变量值以sysInit函数中初始化后的结果为准
-'''
-defaultFont = None  # 默认字体
-screen = None  # 屏幕输出对象
-backSurface = None  # 图像输出缓冲画板
-score = 0  # 玩家得分记录
-clearLineScore = 0  # 玩家清除的方块行数
-clock = None  # 游戏时钟
-nowBlock = None  # 当前下落中的方块
-nextBlock = None  # 下一个将出现的方块
-fallSpeed = 10  # 当前方块下落速度
-beginFallSpeed = fallSpeed  # 游戏初始时方块下落速度
-speedBuff = 0  # 下落速度缓冲变量
-keyBuff = None  # 上一次按键记录
-maxBlockWidth = 10  # 舞台堆叠区X轴最大可容纳基础方块数
-maxBlockHeight = 18  # 舞台堆叠区Y轴最大可容纳基础方块数
-blockWidth = 30  # 以像素为单位的基础方块宽度
-blockHeight = 30  # 以像素为单位的基础方块高度
-blocks = []  # 方块形状矩阵四维列表。第一维为不同的方块形状，第二维为每个方块形状不同的方向（以0下标起始，一共四个方向），第三维为Y轴方块形状占用情况，第四维为X轴方块形状占用情况。矩阵中0表示没有方块，1表示有方块。
-stage = []  # 舞台堆叠区矩阵二维列表，第一维为Y轴方块占用情况，第二维为X轴方块占用情况。矩阵中0表示没有方块，1表示有固实方块，2表示有活动方块。
-gameOver = False  # 游戏结束标志
-pause = False  # 游戏暂停标志
-
-
-def printTxt(content, x, y, font, screen, color=(255, 255, 255)):
-    '''显示文本
-    args:
-        content:待显示文本内容
-        x,y:显示坐标
-        font:字体
-        screen:输出的screen
-        color:颜色
-    '''
-    imgTxt = font.render(content, True, color)
-    screen.blit(imgTxt, (x, y))
-
-
-class point(object):
-    '''平面坐标点类
-    attributes:
-        x,y:坐标值
-    '''
-
-    def __init__(self, x, y):
-        self.__x = x
-        self.__y = y
-
-    def getx(self):
-        return self.__x
-
-    def setx(self, x):
-        self.__x = x
-
-    x = property(getx, setx)
-
-    def gety(self):
-        return self.__y
-
-    def sety(self, y):
-        self.__y = y
-
-    y = property(gety, sety)
-
-    def __str__(self):
-        return "{x:" + "{:.0f}".format(self.__x) + ",y:" + "{:.0f}".format(self.__y) + "}"
-
-
-class blockSprite(object):
-    '''
-    方块形状精灵类
-    用于定义下落方块
-    attributes:
-        shape:方块形状编号
-        direction:方块方向编号
-        xy,方块形状左上角方块坐标
-        block:方块形状矩阵
-    '''
-
-    def __init__(self, shape, direction, xy):
-        self.shape = shape
-        self.direction = direction
-        self.xy = xy
-
-    def chgDirection(self, direction):
-        '''
-        改变方块的方向
-        args:
-            direction:1为向右转，0为向左转。
-        '''
-        dirNumb = len(blocks[self.shape]) - 1
-        if direction == 1:
-            self.direction += 1
-            if self.direction > dirNumb:
-                self.direction = 0
-        else:
-            self.direction -= 1
-            if self.direction < 0:
-                self.direction = dirNumb
-
-    def clone(self):
-        '''
-        克隆本体
-        return:
-            返回自身的克隆
-        '''
-        return blockSprite(self.shape, self.direction, point(self.xy.x, self.xy.y))
-
-    def _getBlock(self):
-        return blocks[self.shape][self.direction]
-
-    block = property(_getBlock)
-
-
-def getConf(fileName):
-    '''
-    从配置文件中读取方块形状数据
-    每个方块以4*4矩阵表示形状，配置文件每行代表一个方块，用分号分隔矩阵行，用逗号分隔矩阵列，0表示没有方块，1表示有方块。
-    因为此程序只针对俄罗斯方块的经典版，所以方块矩阵大小以硬编码的形式写死为4*4。
-    args:
-        fileName:配置文件名
-    '''
-    global blocks  # blocks记录方块形状。
-    with open(fileName, 'rt') as fp:
-        for temp in fp.readlines():
-            blocks.append([])
-            blocksNumb = len(blocks) - 1
-            blocks[blocksNumb] = []
-            # 每种方块形状有四个方向，以0～3表示。配置文件中只记录一个方向形状，另外三个方向的矩阵排列在sysInit中通过调用transform计算出来。
-            blocks[blocksNumb].append([])
-            row = temp.split(";")
-            for r in range(len(row)):
-                col = []
-                ct = row[r].split(",")
-                # 对矩阵列数据做规整，首先将非“1”的值全修正成“0”以过滤空字串或回车符。
-                for c in range(len(ct)):
-                    if ct[c] != "1":
-                        col.append(0)
-                    else:
-                        col.append(1)
-                # 将不足4列的矩阵通过补“0”的方式，补足4列。
-                for c in range(len(ct) - 1, 3):
-                    col.append(0)
-                blocks[blocksNumb][0].append(col)
-            # 如果矩阵某行没有方块，则配置文件中可以省略此行，程序会在末尾补上空行数据。
-            for r in range(len(row) - 1, 3):
-                blocks[blocksNumb][0].append([0, 0, 0, 0])
-            blocks[blocksNumb][0] = formatBlock(blocks[blocksNumb][0])
-
-
-def sysInit():
-    '''
-    系统初始化
-    包括pygame环境初始化，全局变量赋值，生成每个方块形状的四个方向矩阵。
-    '''
-    global defaultFont, screen, backSurface, clock, blocks, stage, gameOver, fallSpeed, beginFallSpeed, nowBlock, nextBlock, score, clearLineScore, pause
-
-    # pygame运行环境初始化
-    pg.init()
-    screen = pg.display.set_mode((500, 550))
-    backSurface = pg.Surface((screen.get_rect().width, screen.get_rect().height))
-    pg.display.set_caption("俄罗斯方块V2.0")
-    clock = pg.time.Clock()
-    pg.mouse.set_visible(False)
-
-    # 游戏全局变量初始化
-    defaultFont = pg.font.SysFont("Simhei", 16)
-    nowBlock = None
-    nextBlock = None
-    gameOver = False
-    pause = False
-    score = 0
-    clearLineScore = 0
-    beginFallSpeed = 20
-    fallSpeed = beginFallSpeed
-
-    # 初始化游戏舞台
-    stage = []
-    for y in range(maxBlockHeight):
-        stage.append([])
-        for x in range(maxBlockWidth):
-            stage[y].append(EMPTY_CELL)
-
-    # 生成每个方块形状4个方向的矩阵数据
-    for x in range(len(blocks)):
-        # 因为重新开始游戏时会调用sysinit对系统所有参数重新初始化，为了避免方向矩阵数据重新生成，需要在此判断是否已经生成，如果已经生成则跳过。
-        if len(blocks[x]) < 2:
-            t = blocks[x][0]
-            for i in range(3):
-                t = transform(t, 1)
-                blocks[x].append(formatBlock(t))
-
-
-# transform,removeTopBlank,formatBlock这三个函数只为生成方块形状4个方向矩阵使用，在游戏其他环节无作用,在阅读程序时可以先跳过。
-def transform(block, direction=0):
-    '''
-    生成指定方块形状转换方向后的矩阵数据
-    args:
-        block:方块形状矩阵参数
-        direction:转换的方向，0代表向左，1代表向右
-    return:
-        变换方向后的方块形状矩阵参数
-    '''
-    result = []
-    for y in range(4):
-        result.append([])
-        for x in range(4):
-            if direction == 0:
-                result[y].append(block[x][3 - y])
-            else:
-                result[y].append(block[3 - x][y])
-    return result
-
-
-def removeTopBlank(block):
-    '''
-    清除方块矩阵顶部空行数据
-    args:
-        block:方块开关矩阵
-    return:
-        整理后的方块矩阵数据
-    '''
-    result = copy.deepcopy(block)
-    blankNumb = 0
-    while sum(result[0]) < 1 and blankNumb < 4:
-        del result[0]
-        result.append([0, 0, 0, 0])
-        blankNumb += 1
-    return result
-
-
-def formatBlock(block):
-    '''
-    整理方块矩阵数据，使方块在矩阵中处于左上角的位置
-    args:
-        block:方块开关矩阵
-    return:
-        整理后的方块矩阵数据
-    '''
-    result = removeTopBlank(block)
-    # 将矩阵右转，用于计算左侧X轴线空行,计算完成后再转回
-    result = transform(result, 1)
-    result = removeTopBlank(result)
-    result = transform(result, 0)
-    return result
-
-
-def checkDeany(sprite):
-    '''
-    检查下落方块是否与舞台堆叠区中固实方块发生碰撞
-    args:
-        sprite:下落方块
-    return:
-        如果发生碰撞则返回True
-    '''
-    topX = sprite.xy.x
-    topY = sprite.xy.y
-    for y in range(len(sprite.block)):
-        for x in range(len(sprite.block[y])):
-            if sprite.block[y][x] == 1:
-                yInStage = topY + y
-                xInStage = topX + x
-                if yInStage > maxBlockHeight - 1 or yInStage < 0:
-                    return True
-                if xInStage > maxBlockWidth - 1 or xInStage < 0:
-                    return True
-                if stage[yInStage][xInStage] == STATIC_BLOCK:
-                    return True
-    return False
-
-
-def checkLine():
-    '''
-    检测堆叠区是否有可消除的整行固实方块
-    根据检测结果重新生成堆叠区矩阵数据，调用updateScore函数更新玩家积分等数据。
-    return:
-        本轮下落周期消除的固实方块行数
-    '''
-    global stage
-    clearCount = 0  # 本轮下落周期消除的固实方块行数
-    tmpStage = []  # 根据消除情况新生成的堆叠区矩阵，在有更新的情况下会替换全局的堆叠区矩阵。
-
-    for y in stage:
-        # 因为固实方块在堆叠矩阵里以2表示，所以判断方块是否已经满一整行只要计算矩阵行数值合计是否等于堆叠区X轴最大方块数*2就可以。
-        if sum(y) >= maxBlockWidth * 2:
-            tmpStage.insert(0, maxBlockWidth * [0])
-            clearCount += 1
-        else:
-            tmpStage.append(y)
-    if clearCount > 0:
-        stage = tmpStage
-        updateScore(clearCount)
-    return clearCount
-
-
-def updateStage(sprite, updateType=1):
-    '''
-    将下落方块坐标数据更新到堆叠区数据中。下落方块涉及的坐标在堆叠区中用数字1标识，固实方块在堆叠区中用数字2标识。
-    args:
-        sprite:下落方块形状
-        updateType:更新方式，0代表清除，1代表动态加入,2代表固实加入。
-    '''
-
-    global stage
-    topX = sprite.xy.x
-    topY = sprite.xy.y
-    for y in range(len(sprite.block)):
-        for x in range(len(sprite.block[y])):
-            if sprite.block[y][x] == 1:
-                if updateType == 0:
-                    if stage[topY + y][topX + x] == FALLING_BLOCK:
-                        stage[topY + y][topX + x] = EMPTY_CELL
-                elif updateType == 1:
-                    if stage[topY + y][topX + x] == EMPTY_CELL:
-                        stage[topY + y][topX + x] = FALLING_BLOCK
-                else:
-                    stage[topY + y][topX + x] = STATIC_BLOCK
-
-
-def updateScore(clearCount):
-    '''
-    更新玩家游戏记录，包括积分、关卡、消除方块行数，并且根据关卡数更新方块下落速度。
-    args:
-        clearCount:本轮下落周期内清除的方块行数。
-    return:
-        当前游戏的最新积分
-    '''
-    global score, fallSpeed, clearLineScore
-
-    prizePoint = 0  # 额外奖励分数，同时消除的行数越多，奖励分值越高。
-    if clearCount > 1:
-        if clearCount < 4:
-            prizePoint = clearCount ** clearCount
-        else:
-            prizePoint = clearCount * 5
-    score += (clearCount + prizePoint)
-    # 玩得再牛又有何用？ :)
-    if score > 99999999:
-        score = 0
-    clearLineScore += clearCount
-    if clearLineScore > 100:
-        clearLineScore = 0
-        fallSpeed = beginFallSpeed
-    return score
-
-
-def drawStage(drawScreen):
-    '''
-    在给定的画布上绘制舞台
-    args:
-        drawScreen:待绘制的画布
-    '''
-    staticColor = 0, 0, 255  # 固实方块颜色
-    activeColor = 0, 0, 255  # 方块形状颜色
-    fontColor = 200, 10, 120  # 文字颜色
-    baseRect = 0, 0, blockWidth * maxBlockWidth + 1, blockHeight * maxBlockHeight + 1  # 堆叠区方框
-
-    # 绘制堆叠区外框
-    drawScreen.fill((255, 255, 255))
-    pg.draw.rect(drawScreen, staticColor, baseRect, 1)
-
-    # 绘制堆叠区内的所有方块，包括下落方块形状
-    for y in range(len(stage)):
-        for x in range(len(stage[y])):
-            baseRect = x * blockWidth, y * blockHeight, blockWidth, blockHeight
-            if stage[y][x] == 2:
-                pg.draw.rect(drawScreen, staticColor, baseRect)
-            elif stage[y][x] == 1:
-                pg.draw.rect(drawScreen, activeColor, baseRect)
-
-    # 绘制下一个登场的下落方块形状
-    printTxt("下一个:", 320, 350, defaultFont, backSurface, fontColor)
-    if nextBlock != None:
-        for y in range(len(nextBlock.block)):
-            for x in range(len(nextBlock.block[y])):
-                baseRect = 320 + x * blockWidth, 380 + y * blockHeight, blockWidth, blockHeight
-                if nextBlock.block[y][x] == 1:
-                    pg.draw.rect(drawScreen, activeColor, baseRect)
-
-    # 绘制积分
-    printTxt("得分:%d" % score, 320, 70, defaultFont, backSurface, fontColor)
-
-    # 特殊游戏状态的输出
-    if gameOver:
-        printTxt("GAME OVER", 230, 200, defaultFont, backSurface, fontColor)
-
-
-def process():
-    '''
-    游戏控制及逻辑处理
-    '''
-    global gameOver, nowBlock, nextBlock, speedBuff, backSurface, keyBuff, pause
-
-    if nextBlock is None:
-        nextBlock = blockSprite(random.randint(0, len(blocks) - 1), random.randint(0, 3),
-                                point(maxBlockWidth + 4, maxBlockHeight))
-    if nowBlock is None:
-        nowBlock = nextBlock.clone()
-        nowBlock.xy = point(maxBlockWidth // 2, 0)
-        nextBlock = blockSprite(random.randint(0, len(blocks) - 1), random.randint(0, 3),
-                                point(maxBlockWidth + 4, maxBlockHeight))
-        # 每次生成新的下落方块形状时检测碰撞，如果新的方块形状一出现就发生碰撞，则显然玩家已经没有机会了。
-        gameOver = checkDeany(nowBlock)
-        # 游戏失败后，要将活动方块形状做固实处理
-        if gameOver:
-            updateStage(nowBlock, 2)
-
-    '''
-    对于下落方块形状操控以及移动，采用影子形状进行预判断。如果没有碰撞则将变化应用到下落方块形状上，否则不变化。
-    '''
-    tmpBlock = nowBlock.clone()  # 影子方块形状
-    '''
-    处理用户输入
-    对于用户输入分为两部分处理。
-    第一部分，将退出、暂停、重新开始以及形状变换的操作以敲击事件处理。
-    这样做的好处是只对敲击一次键盘做出处理，避免用户按住单一按键后程序反复处理影响操控，特别是形状变换操作，敲击一次键盘换变一次方向，玩家很容易控制。
-    '''
-    for event in pg.event.get():
-        if event.type == pg.QUIT:
-            sys.exit()
-            pg.quit()
-        elif event.type == pg.KEYDOWN:
-            if event.key == pg.K_ESCAPE:
-                sys.exit()
-                pg.quit()
-            elif event.key == pg.K_RETURN:
-                if pause:
-                    pause = False
-                else:
-                    pause = True
-                    return
-            elif not gameOver and not pause:
-                if event.key == pg.K_SPACE:
-                    tmpBlock.chgDirection(1)
-                elif event.key == pg.K_UP:
-                    tmpBlock.chgDirection(0)
-
-    if not gameOver and not pause:
-        '''
-        用户输入处理第二部分，将左右移动和快速下落的操作以按下事件处理。
-        这样做的好处是不需要玩家反复敲击键盘进行操作，保证了操作的连贯性。
-        由于连续移动的速度太快，不利于定位。所以在程序中采用了简单的输入减缓处理，即通过keyBuff保存上一次操作按键，如果此次按键与上一次按键相同，则跳过此轮按键处理。
-        '''
-        keys = pg.key.get_pressed()
-        if keys[K_DOWN]:
-            tmpBlock.xy = point(tmpBlock.xy.x, tmpBlock.xy.y + 1)
-            keyBuff = None
-        elif keys[K_LEFT]:
-            if keyBuff != pg.K_LEFT:
-                tmpBlock.xy = point(tmpBlock.xy.x - 1, tmpBlock.xy.y)
-                keyBuff = pg.K_LEFT
-            else:
-                keyBuff = None
-        elif keys[K_RIGHT]:
-            if keyBuff != pg.K_RIGHT:
-                tmpBlock.xy = point(tmpBlock.xy.x + 1, tmpBlock.xy.y)
-                keyBuff = pg.K_RIGHT
-            else:
-                keyBuff = None
-        if not checkDeany(tmpBlock):
-            updateStage(nowBlock, 0)
-            nowBlock = tmpBlock.clone()
-
-        # 处理自动下落
-        speedBuff += 1
-        if speedBuff >= fallSpeed:
-            speedBuff = 0
-            tmpBlock = nowBlock.clone()
-            tmpBlock.xy = point(nowBlock.xy.x, nowBlock.xy.y + 1)
-            if not checkDeany(tmpBlock):
-                updateStage(nowBlock, 0)
-                nowBlock = tmpBlock.clone()
-                updateStage(nowBlock, 1)
-            else:
-                # 在自动下落过程中一但发生活动方块形状的碰撞，则将活动方块形状做固实处理，并检测是否有可消除的整行方块
-                updateStage(nowBlock, 2)
-                checkLine()
-                nowBlock = None
-        else:
-            updateStage(nowBlock, 1)
-    drawStage(backSurface)
-    screen.blit(backSurface, (0, 0))
-    pg.display.update()
-    clock.tick(40)
+def print_text(screen, font, x, y, text, fcolor=(255, 255, 255)):
+    imgText = font.render(text, True, fcolor)
+    screen.blit(imgText, (x, y))
 
 
 def main():
-    '''
-    主程序
-    '''
-    getConf("elsfk.cfg")
-    sysInit()
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption('俄罗斯方块V3.0')
+
+    font1 = pygame.font.SysFont('SimHei', 24)  # 黑体24
+    font2 = pygame.font.Font(None, 72)  # GAME OVER 的字体
+    font_pos_x = BLOCK_WIDTH * SIZE + BORDER_WIDTH + 10  # 右侧信息显示区域字体位置的X坐标
+    gameover_size = font2.size('GAME OVER')
+    font1_height = int(font1.size('得分')[1])
+
+    cur_block = None   # 当前下落方块
+    next_block = None  # 下一个方块
+    cur_block_color = (0, 0, 255)  #
+    next_block_color = (0, 0, 255)
+    area_block_color = (0, 0, 255)
+
+    cur_pos_x, cur_pos_y = 0, 0
+
+    game_area = None    # 整个游戏区域
+    game_over = True
+    start = False       # 是否开始，当start = True，game_over = True 时，才显示 GAME OVER
+    score = 0           # 得分
+    orispeed = 0.5      # 原始速度
+    speed = orispeed    # 当前速度
+    pause = False       # 暂停
+    last_drop_time = None   # 上次下落时间
+    last_press_time = None  # 上次按键时间
+
+    def _dock():
+        nonlocal cur_block, next_block, game_area, cur_pos_x, cur_pos_y, game_over, score, speed
+        for _i in range(cur_block.start_pos.Y, cur_block.end_pos.Y + 1):
+            for _j in range(cur_block.start_pos.X, cur_block.end_pos.X + 1):
+                if cur_block.template[_i][_j] != '.':
+                    game_area[cur_pos_y + _i][cur_pos_x + _j] = '0'
+        if cur_pos_y + cur_block.start_pos.Y <= 0:
+            game_over = True
+        else:
+            # 计算消除
+            remove_idxs = []
+            for _i in range(cur_block.start_pos.Y, cur_block.end_pos.Y + 1):
+                if all(_x == '0' for _x in game_area[cur_pos_y + _i]):
+                    remove_idxs.append(cur_pos_y + _i)
+            if remove_idxs:
+                # 计算得分
+                remove_count = len(remove_idxs)
+                if remove_count == 1:
+                    score += 100
+                elif remove_count == 2:
+                    score += 300
+                elif remove_count == 3:
+                    score += 700
+                elif remove_count == 4:
+                    score += 1500
+                speed = orispeed - 0.03 * (score // 10000)
+                # 消除
+                _i = _j = remove_idxs[-1]
+                while _i >= 0:
+                    while _j in remove_idxs:
+                        _j -= 1
+                    if _j < 0:
+                        game_area[_i] = ['.'] * BLOCK_WIDTH
+                    else:
+                        game_area[_i] = game_area[_j]
+                    _i -= 1
+                    _j -= 1
+            cur_block = next_block
+            next_block = blocks.get_block()
+            cur_pos_x, cur_pos_y = (BLOCK_WIDTH - cur_block.end_pos.X - 1) // 2, -1 - cur_block.end_pos.Y
+
+    def _judge(pos_x, pos_y, block):
+        nonlocal game_area
+        for _i in range(block.start_pos.Y, block.end_pos.Y + 1):
+            if pos_y + block.end_pos.Y >= BLOCK_HEIGHT:
+                return False
+            for _j in range(block.start_pos.X, block.end_pos.X + 1):
+                if pos_y + _i >= 0 and block.template[_i][_j] != '.' and game_area[pos_y + _i][pos_x + _j] != '.':
+                    return False
+        return True
+
     while True:
-        process()
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                sys.exit()
+            elif event.type == KEYDOWN:
+                if event.key == K_RETURN:
+                    if game_over:
+                        start = True
+                        game_over = False
+                        score = 0
+                        last_drop_time = time.time()
+                        last_press_time = time.time()
+                        game_area = [['.'] * BLOCK_WIDTH for _ in range(BLOCK_HEIGHT)]
+                        cur_block = blocks.get_block()
+                        next_block = blocks.get_block()
+                        cur_pos_x, cur_pos_y = (BLOCK_WIDTH - cur_block.end_pos.X - 1) // 2, -1 - cur_block.end_pos.Y
+                elif event.key == K_SPACE:
+                    if not game_over:
+                        pause = not pause
+                elif event.key in (K_w, K_UP):
+                    # 旋转
+                    # 其实记得不是很清楚了，比如
+                    # .0.
+                    # .00
+                    # ..0
+                    # 这个在最右边靠边的情况下是否可以旋转，我试完了网上的俄罗斯方块，是不能旋转的，这里我们就按不能旋转来做
+                    # 我们在形状设计的时候做了很多的空白，这样只需要规定整个形状包括空白部分全部在游戏区域内时才可以旋转
+                    if 0 <= cur_pos_x <= BLOCK_WIDTH - len(cur_block.template[0]):
+                        _next_block = blocks.get_next_block(cur_block)
+                        if _judge(cur_pos_x, cur_pos_y, _next_block):
+                            cur_block = _next_block
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT:
+                if not game_over and not pause:
+                    if time.time() - last_press_time > 0.1:
+                        last_press_time = time.time()
+                        if cur_pos_x > - cur_block.start_pos.X:
+                            if _judge(cur_pos_x - 1, cur_pos_y, cur_block):
+                                cur_pos_x -= 1
+            if event.key == pygame.K_RIGHT:
+                if not game_over and not pause:
+                    if time.time() - last_press_time > 0.1:
+                        last_press_time = time.time()
+                        # 不能移除右边框
+                        if cur_pos_x + cur_block.end_pos.X + 1 < BLOCK_WIDTH:
+                            if _judge(cur_pos_x + 1, cur_pos_y, cur_block):
+                                cur_pos_x += 1
+            if event.key == pygame.K_DOWN:
+                if not game_over and not pause:
+                    if time.time() - last_press_time > 0.1:
+                        last_press_time = time.time()
+                        if not _judge(cur_pos_x, cur_pos_y + 1, cur_block):
+                            _dock()
+                        else:
+                            last_drop_time = time.time()
+                            cur_pos_y += 1
+
+        # 填充背景色
+        screen.fill(BG_COLOR)
+        # 画游戏区域分隔线
+        pygame.draw.line(screen, BORDER_COLOR,
+                         (SIZE * BLOCK_WIDTH + BORDER_WIDTH // 2, 0),
+                         (SIZE * BLOCK_WIDTH + BORDER_WIDTH // 2, SCREEN_HEIGHT), BORDER_WIDTH)
+
+        # 画现有方块
+        if game_area:
+            for i, row in enumerate(game_area):
+                for j, cell in enumerate(row):
+                    if cell != '.':
+                        pygame.draw.rect(screen, area_block_color, (j * SIZE, i * SIZE, SIZE, SIZE), 0)
 
 
-if __name__ == "__main__":
+        if not game_over:
+            cur_drop_time = time.time()
+            if cur_drop_time - last_drop_time > speed:
+                if not pause:
+                    # 不应该在下落的时候来判断到底没，我们玩俄罗斯方块的时候，方块落到底的瞬间是可以进行左右移动
+                    if not _judge(cur_pos_x, cur_pos_y + 1, cur_block):
+                        _dock()
+                    else:
+                        last_drop_time = cur_drop_time
+                        cur_pos_y += 1
+        else:
+            if start:
+                print_text(screen, font2,
+                           (SCREEN_WIDTH - gameover_size[0]) // 2, (SCREEN_HEIGHT - gameover_size[1]) // 2,
+                           'GAME OVER', RED)
+
+        # 画当前下落方块
+        if cur_block:
+            for i in range(cur_block.start_pos.Y, cur_block.end_pos.Y + 1):
+                for j in range(cur_block.start_pos.X, cur_block.end_pos.X + 1):
+                    if cur_block.template[i][j] != '.':
+                        pygame.draw.rect(screen, cur_block_color,
+                                         ((cur_pos_x + j) * SIZE, (cur_pos_y + i) * SIZE, SIZE, SIZE), 0)
+
+        print_text(screen, font1, font_pos_x, 10, f'得分: ')
+        print_text(screen, font1, font_pos_x, 10 + font1_height + 6, f'{score}')
+        print_text(screen, font1, font_pos_x, 20 + (font1_height + 6) * 2, f'速度: ')
+        print_text(screen, font1, font_pos_x, 20 + (font1_height + 6) * 3, f'{score // 10000}')
+        print_text(screen, font1, font_pos_x, 30 + (font1_height + 6) * 4, f'下一个：')
+
+        if next_block:
+            _h = 30 + (font1_height + 6) * 5
+            for i in range(next_block.start_pos.Y, next_block.end_pos.Y + 1):
+                for j in range(next_block.start_pos.X, next_block.end_pos.X + 1):
+                    if next_block.template[i][j] != '.':
+                        pygame.draw.rect(screen, next_block_color, (font_pos_x + j * SIZE, _h + i * SIZE, SIZE, SIZE), 0)
+
+        pygame.display.flip()
+
+
+if __name__ == '__main__':
     main()
