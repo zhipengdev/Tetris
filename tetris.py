@@ -173,6 +173,12 @@ def main():
                     if cell != '.':
                         pygame.draw.rect(screen, area_block_color, (j * SIZE, i * SIZE, SIZE, SIZE), 0)
 
+        # 画网格线 竖线
+        for x in range(BLOCK_WIDTH):
+            pygame.draw.line(screen, BLACK, (x * SIZE, 0), (x * SIZE, SCREEN_HEIGHT), 1)
+        # # 画网格线 横线
+        for y in range(BLOCK_HEIGHT):
+            pygame.draw.line(screen, BLACK, (0, y * SIZE), (BLOCK_WIDTH * SIZE, y * SIZE), 1)
 
         if not game_over:
             cur_drop_time = time.time()
