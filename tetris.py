@@ -388,7 +388,8 @@ def drawStage(drawScreen):
                 if nextBlock.block[y][x] == 1:
                     pg.draw.rect(drawScreen, activeColor, baseRect)
 
-    
+    # 绘制积分
+    printTxt("得分:%d" % score, 320, 70, defaultFont, backSurface, fontColor)
 
     # 特殊游戏状态的输出
     if gameOver:
