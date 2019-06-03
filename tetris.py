@@ -176,7 +176,7 @@ def main():
         # 画网格线 竖线
         for x in range(BLOCK_WIDTH):
             pygame.draw.line(screen, BLACK, (x * SIZE, 0), (x * SIZE, SCREEN_HEIGHT), 1)
-        # # 画网格线 横线
+        # 画网格线 横线
         for y in range(BLOCK_HEIGHT):
             pygame.draw.line(screen, BLACK, (0, y * SIZE), (BLOCK_WIDTH * SIZE, y * SIZE), 1)
 
