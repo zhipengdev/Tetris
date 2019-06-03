@@ -34,9 +34,9 @@ def main():
 
     cur_block = None   # 当前下落方块
     next_block = None  # 下一个方块
-    cur_block_color = (0, 0, 255)  #
-    next_block_color = (0, 0, 255)
-    area_block_color = (0, 0, 255)
+    cur_block_color = (255, 128, 200)  #
+    next_block_color = (255, 128, 200)
+    area_block_color = (255, 128, 200)
 
     cur_pos_x, cur_pos_y = 0, 0
 
@@ -220,6 +220,36 @@ def main():
             print_text(screen, font1, font_pos_x, 200 + (font1_height + 6) * 4, f'按回车键')
             if game_over:
                 print_text(screen, font1, font_pos_x, 240 + (font1_height + 6) * 4, f'开始游戏')
+        if start:
+            if next_block.name == "0":
+                next_block_color = (255, 0, 0)
+            elif next_block.name == "I":
+                next_block_color = (0, 255, 0)
+            elif next_block.name == "Z":
+                next_block_color = (0, 0, 255)
+            elif next_block.name == "T":
+                next_block_color = (238, 179, 34)
+            elif next_block.name == "L":
+                next_block_color = (23, 129, 78)
+            elif next_block.name == "S":
+                next_block_color = (166, 34, 0)
+            else:
+                next_block_color = (42, 200, 0)
+
+            if cur_block.name == "0":
+                cur_block_color = (255, 0, 0)
+            elif cur_block.name == "I":
+                cur_block_color = (0, 255, 0)
+            elif cur_block.name == "Z":
+                cur_block_color = (0, 0, 255)
+            elif cur_block.name == "T":
+                cur_block_color = (238, 179, 34)
+            elif cur_block.name == "L":
+                cur_block_color = (23, 129, 78)
+            elif cur_block.name == "S":
+                cur_block_color = (166, 34, 0)
+            else:
+                cur_block_color = (42, 200, 0)
 
         if next_block:
             _h = 30 + (font1_height + 6) * 5
